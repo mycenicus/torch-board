@@ -4,8 +4,8 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from board.telemetry.events import MetricBatch, parse_event_payload
 from board.telemetry.protocol import TelemetryMessage, TelemetrySource
+from board.telemetry.schemas import MetricBatch, parse_event_payload
 
 
 @pytest.fixture
