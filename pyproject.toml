@@ -4,8 +4,10 @@ version = "0.1.0"
 description="Live monitoring dashboard for machine learning training"
 requires-python = ">=3.14"
 dependencies = [
+    "alembic>=1.20.1",
     "fastapi[standard]>=0.162.2",
     "pydantic>=2.14.3",
+    "sqlalchemy>=2.1.8",
     "uvicorn>=0.54.0",
 ]
 
