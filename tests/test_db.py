@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import text
@@ -49,3 +50,34 @@ def test_get_db():
         assert db.bind == engine
     finally:
         db_generator.close()
+
+
+def test_get_db_closes_session():
+    """Test if Generator.close() is executed"""
+    mock_session = MagicMock()
+
+    with patch("board.db.database.SessionLocal", return_value=mock_session):
+        db_generator = get_db()
+
+        next(db_generator)
+
+        mock_session.close.assert_not_called()
+
+        db_generator.close()
+
+        mock_session.close.assert_called_once()
+
+
+def test_get_db_closes_session_after_exception():
+    """Test if finally block executes in get_db"""
+    mock_session = MagicMock()
+
+    with patch("board.db.database.SessionLocal", return_value=mock_session):
+        db_generator = get_db()
+
+        next(db_generator)
+
+        with pytest.raises(RuntimeError):
+            db_generator.throw(RuntimeError("Something went wrong"))
+
+        mock_session.close.assert_called_once()
