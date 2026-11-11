@@ -2,7 +2,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATABASE_DIR = PROJECT_ROOT / "data"
@@ -14,6 +14,10 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(bind=engine)
+
+
+class TelemetryBase(DeclarativeBase):
+    pass
 
 
 def get_db() -> Generator[Session]:

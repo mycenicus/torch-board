@@ -1,46 +1,42 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import (
-    Column,
-    ForeignKey,
-    MetaData,
-    Named,
-    String,
-    Table,
-    TypedColumns,
-)
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from board.db.database import engine
-
-metadata_obj = MetaData()
+from board.db.database import TelemetryBase, engine
 
 
-class experiment_cols(TypedColumns):
+class Experiment(TelemetryBase):
+    __tablename__: str = "experiment"
+
     # fmt: off
-    id:          Named[int]        = Column(primary_key=True)
-    name:        Named[str]        = Column(String(length=30), nullable=False)
-    description: Named[str | None] = Column(nullable=True)
-    created_at:  Named[datetime]   = Column(nullable=False)
+    id:          Mapped[int] = mapped_column(primary_key=True)
+    name:        Mapped[str] = mapped_column(String(length=30))
+    description: Mapped[str | None]
+    created_at:  Mapped[datetime]
+    runs:        Mapped[list[Run]] = relationship(back_populates="experiment")
     # fmt: on
 
 
-experiment_table = Table("experiment", metadata_obj, experiment_cols)
+Status = Literal["pending", "running", "completed", "failed"]
 
 
-class run_cols(TypedColumns):
+class Run(TelemetryBase):
+    __tablename__: str = "run"
+
     # fmt: off
-    id:            Named[UUID]            = Column(primary_key=True)
-    experiment_id: Named[int]             = Column(ForeignKey("experiment.id"))
-    name:          Named[str]             = Column(nullable=False)
-    model_name:    Named[str]             = Column(nullable=False)
-    status:        Named[str]             = Column(nullable=False)
-    created_at:    Named[datetime]        = Column(nullable=False)
-    started_at:    Named[datetime | None] = Column(nullable=True)
-    finished_at:   Named[datetime | None] = Column(nullable=True)
+    id:            Mapped[UUID] = mapped_column(primary_key=True)
+    experiment_id: Mapped[int]  = mapped_column(ForeignKey("experiment.id"))
+    name:          Mapped[str]
+    model_name:    Mapped[str]
+    status:        Mapped[Status]
+    created_at:    Mapped[datetime]
+    started_at:    Mapped[datetime | None]
+    finished_at:   Mapped[datetime | None]
+    experiment:    Mapped[Experiment] = relationship(back_populates="runs")
     # fmt: on
 
 
-run_table = Table("run", metadata_obj, run_cols)
-
-metadata_obj.create_all(engine)
+TelemetryBase.metadata.create_all(engine)
