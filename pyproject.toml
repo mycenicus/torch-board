@@ -30,3 +30,8 @@ packages = ["src/board"]
 [tool.basedpyright]
 reportMissingTypeStubs = false
 reportUnusedCallResult = false
+
+[tool.ruff]
+exclude = [
+    "alembic"
+]

@@ -40,7 +40,8 @@ class Run(TelemetryBase):
                                             native_enum=False,
                                             create_constraint=True,
                                             name="run_status",
-                                        )
+                                        ),
+                                        default="pending"
                                     )
     created_at:    Mapped[datetime]        = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     started_at:    Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
