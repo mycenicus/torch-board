@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from board.db.database import TelemetryBase, engine
-from board.db.models import Experiment, Run
+from board.db.models import Experiment, MetricFloat, Run
 
 
 @pytest.fixture
@@ -137,3 +137,78 @@ def test_run_columns_are_timezone_aware():
     assert columns.created_at.type.timezone is True
     assert columns.started_at.type.timezone is True
     assert columns.finished_at.type.timezone is True
+
+
+def test_metricfloat_rejects_empty_name(db_session: Session):
+    """Check CHECK length(name) > 0 constraint works"""
+    experiment = Experiment(name="Test experiment")
+    run = Run(name="Run 1", model_name="transformer")
+    metric = MetricFloat(name="", value=0.42, step=0)
+
+    experiment.runs.append(run)
+    run.metrics.append(metric)
+
+    db_session.add(experiment)
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_metricfloat_rejects_negative_step(db_session: Session):
+    """Check CHECK step >= 0 constraint works"""
+    experiment = Experiment(name="Test experiment")
+    run = Run(name="Run 1", model_name="transformer")
+    metric = MetricFloat(name="loss", value=0.42, step=-1)
+
+    experiment.runs.append(run)
+    run.metrics.append(metric)
+
+    db_session.add(experiment)
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_create_multiple_metricfloat():
+    """Test two-way relationships"""
+    experiment = Experiment(name="Test experiment")
+    run = Run(name="Run 1", model_name="transformer")
+    metric1 = MetricFloat(name="loss", value=0.42, step=0)
+    metric2 = MetricFloat(name="lr", value=0.001, step=0)
+
+    experiment.runs.append(run)
+    run.metrics.append(metric1)
+    run.metrics.append(metric2)
+
+    assert experiment.runs[0].metrics[0].name == "loss"
+    assert experiment.runs[0].metrics[1].name == "lr"
+
+    assert metric1.run.name == "Run 1"
+    assert metric2.run.name == "Run 1"
+
+    assert metric1.run.experiment.name == "Test experiment"
+    assert metric2.run.experiment.name == "Test experiment"
+
+
+def test_persistance(db_session: Session):
+    """
+    Test persistance and that sqlalchemy loads ORM correctly
+    In particular we hope to see that relationships are persisted
+    """
+    experiment = Experiment(name="Test experiment")
+    run = Run(name="Run 1", model_name="transformer")
+    metric1 = MetricFloat(name="loss", value=0.42, step=0)
+    metric2 = MetricFloat(name="lr", value=0.001, step=0)
+
+    experiment.runs.append(run)
+    run.metrics.append(metric1)
+    run.metrics.append(metric2)
+
+    db_session.add(experiment)
+    db_session.commit()
+    db_session.expire_all()
+
+    loaded_run = db_session.query(Run).one()
+
+    assert len(loaded_run.metrics) == 2
+
+    assert loaded_run.metrics[0].name == "loss"
+    assert loaded_run.metrics[1].name == "lr"
