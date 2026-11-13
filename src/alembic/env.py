@@ -11,7 +11,11 @@ from board.db.database import DATABASE_URL, TelemetryBase
 config = context.config
 
 # escape % for ConfigParser
-config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option(
+        "sqlalchemy.url",
+        DATABASE_URL.replace("%", "%%")
+    )
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
