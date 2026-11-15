@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from board.main import app
@@ -5,6 +7,7 @@ from board.main import app
 
 def valid_message():
     return {
+        "run_id": uuid4().hex,
         "sequence": 1,
         "event_type": "metrics.batch",
         "source": {
@@ -13,6 +16,7 @@ def valid_message():
             "software_version": "0.1.0",
         },
         "payload": {
+            "step": 0,
             "metrics": [
                 {
                     "name": "loss",
@@ -20,7 +24,7 @@ def valid_message():
                     "unit": None,
                     "tags": {"split": "train"},
                 }
-            ]
+            ],
         },
     }
 

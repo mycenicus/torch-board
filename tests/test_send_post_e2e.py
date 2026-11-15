@@ -3,6 +3,7 @@
 import subprocess
 import time
 from typing import Any
+from uuid import uuid4
 
 import pytest
 import requests
@@ -24,10 +25,12 @@ def source() -> TelemetrySource:
 @pytest.fixture
 def message_data(source: TelemetrySource) -> dict[str, Any]:
     return {
+        "run_id": uuid4().hex,
         "source": source.model_dump(),
         "sequence": 1,
         "event_type": "metrics.batch",
         "payload": {
+            "step": 0,
             "metrics": [
                 {
                     "name": "loss",
@@ -35,7 +38,7 @@ def message_data(source: TelemetrySource) -> dict[str, Any]:
                     "unit": None,
                     "tags": {"split": "train"},
                 }
-            ]
+            ],
         },
     }
 

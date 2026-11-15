@@ -1,6 +1,6 @@
 import json
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -21,10 +21,12 @@ def source() -> TelemetrySource:
 @pytest.fixture
 def message_data(source: TelemetrySource) -> dict[str, Any]:
     return {
+        "run_id": uuid4().hex,
         "source": source.model_dump(),
         "sequence": 1,
         "event_type": "metrics.batch",
         "payload": {
+            "step": 0,
             "metrics": [
                 {
                     "name": "loss",
@@ -32,7 +34,7 @@ def message_data(source: TelemetrySource) -> dict[str, Any]:
                     "unit": None,
                     "tags": {"split": "train"},
                 }
-            ]
+            ],
         },
     }
 
@@ -40,10 +42,12 @@ def message_data(source: TelemetrySource) -> dict[str, Any]:
 def test_create_telemetry_message(message_data: dict[str, Any]):
     message = TelemetryMessage.model_validate(message_data)
 
-    assert message.protocol_version == "0.1"
+    assert message.protocol_version == "0.2"
     assert message.sequence == 1
     assert message.event_type == "metrics.batch"
+    assert message.payload["step"] == 0
     assert isinstance(message.message_id, UUID)
+    assert isinstance(message.run_id, UUID)
 
 
 def test_is_frozen(message_data: dict[str, Any]):
@@ -116,6 +120,7 @@ def test_serialized_message_is_valid_json(message_data: dict[str, Any]):
 
 def test_known_event_payload_is_validated():
     payload = {
+        "step": 0,
         "metrics": [
             {
                 "name": "loss",
@@ -123,13 +128,14 @@ def test_known_event_payload_is_validated():
                 "unit": None,
                 "tags": {},
             }
-        ]
+        ],
     }
 
     result = parse_event_payload("metrics.batch", payload)
 
     assert isinstance(result, MetricBatch)
     assert result.metrics[0].name == "loss"
+    assert result.step == 0
 
 
 def test_invalid_known_event_payload_is_rejected():
