@@ -125,16 +125,19 @@ def create_experiment(request: ExperimentRequest, session: SessionDep) -> Experi
     status_code=status.HTTP_201_CREATED,
 )  # TODO: async
 def create_run(experiment_id: int, request: RunRequest, session: SessionDep) -> Run:
-    experiment = session.get(Experiment, experiment_id)
+    with session.begin():
+        experiment = session.get(Experiment, experiment_id)
 
-    if experiment is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail=f"Experiment {experiment_id} not found"
+        if experiment is None:  # this exception will rollback transaction
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail=f"Experiment {experiment_id} not found",
+            )
+
+        run = Run(
+            experiment=experiment, name=request.name, model_name=request.model_name
         )
 
-    run = Run(experiment=experiment, name=request.name, model_name=request.model_name)
-
-    with session.begin():
         session.add(run)
 
     return run
