@@ -8,7 +8,14 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from board.api.schemas import (
+    ExperimentRequest,
+    ExperimentResponse,
+    RunRequest,
+    RunResponse,
+)
 from board.db.database import SessionLocal, get_db
+from board.db.models import Experiment, Run
 from board.telemetry.processor import process_telemetry_message
 from board.telemetry.protocol import TelemetryMessage
 from board.telemetry.schemas import parse_event_payload
@@ -97,3 +104,37 @@ async def telemetry_status(request: Request):
         "queue_capacity": worker.queue.maxsize,
         "queue_remaining_capacity": (worker.queue.maxsize - worker.queue.qsize()),
     }
+
+
+@app.post(
+    "/api/v1/experiments",
+    response_model=ExperimentResponse,
+    status_code=status.HTTP_201_CREATED,
+)  # TODO: async
+def create_experiment(request: ExperimentRequest, session: SessionDep) -> Experiment:
+    with session.begin():
+        experiment = Experiment(name=request.name, description=request.description)
+        session.add(experiment)
+
+    return experiment
+
+
+@app.post(
+    "/api/v1/experiments/{experiment_id}/runs",
+    response_model=RunResponse,
+    status_code=status.HTTP_201_CREATED,
+)  # TODO: async
+def create_run(experiment_id: int, request: RunRequest, session: SessionDep) -> Run:
+    experiment = session.get(Experiment, experiment_id)
+
+    if experiment is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=f"Experiment {experiment_id} not found"
+        )
+
+    run = Run(experiment=experiment, name=request.name, model_name=request.model_name)
+
+    with session.begin():
+        session.add(run)
+
+    return run

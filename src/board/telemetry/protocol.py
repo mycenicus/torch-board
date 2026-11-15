@@ -38,8 +38,7 @@ class TelemetryMessage(StrictModel):
     message_id: UUID = Field(default_factory=uuid4)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    # The database Run
-    run_id: UUID
+    run_id: UUID  # The database Run
 
     source: TelemetrySource
     sequence: int = Field(ge=0)
