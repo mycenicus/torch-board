@@ -7,22 +7,23 @@ from pydantic import Field
 from board.telemetry.protocol import StrictModel
 
 
+# payload schemas
 class MetricSample(StrictModel):
     """A single scalar measurement"""
 
     name: str = Field(min_length=1, max_length=128)
-
     value: float
-
     unit: str | None = None
 
     # optional tags, e.g. {"device": "gpu0"}
+    # TODO: Currently discarded from db
     tags: dict[str, str] = Field(default_factory=dict)
 
 
 class MetricBatch(StrictModel):
     """A batch of scalar measurements"""
 
+    step: int = Field(ge=0)
     metrics: list[MetricSample] = Field(min_length=1)
 
 

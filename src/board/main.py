@@ -1,10 +1,14 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from functools import partial
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
+from board.db.database import SessionLocal, get_db
 from board.telemetry.processor import process_telemetry_message
 from board.telemetry.protocol import TelemetryMessage
 from board.telemetry.schemas import parse_event_payload
@@ -20,7 +24,11 @@ async def lifespan(app: FastAPI):
     """Manage the telemetry worker lifecycle"""
 
     worker = TelemetryWorker(
-        handler=process_telemetry_message, max_queue_size=QUEUE_MAX_SIZE
+        handler=partial(  # DB Session is partially applied
+            process_telemetry_message,
+            session_factory=SessionLocal,
+        ),
+        max_queue_size=QUEUE_MAX_SIZE,
     )
 
     app.state.telemetry_worker = worker
@@ -34,6 +42,8 @@ async def lifespan(app: FastAPI):
         await worker.stop(timeout=10.0)
         logger.info("Application stopped")
 
+
+SessionDep = Annotated[Session, Depends(get_db)]
 
 app = FastAPI(lifespan=lifespan)
 

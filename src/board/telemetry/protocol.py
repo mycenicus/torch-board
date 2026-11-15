@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-PROTOCOL_VERSION = "0.1"
+PROTOCOL_VERSION = "0.2"
 
 
 class StrictModel(BaseModel):
@@ -33,23 +33,21 @@ class TelemetryMessage(StrictModel):
     Data lives in payload
     """
 
-    protocol_version: Literal["0.1"] = PROTOCOL_VERSION
+    protocol_version: Literal["0.2"] = PROTOCOL_VERSION
 
     message_id: UUID = Field(default_factory=uuid4)
-
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
+    # The database Run
+    run_id: UUID
+
     source: TelemetrySource
-
     sequence: int = Field(ge=0)
-
     # Identifier
     event_type: str = Field(min_length=1, max_length=128)
-
     # Event specific JSON object
     # Its schema determined by event_type
     payload: dict[str, Any]
-
     # Optional extensions for payload, i.e. metadata
     extensions: dict[str, Any] = Field(default_factory=dict)
 

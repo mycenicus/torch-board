@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from board.db.database import TelemetryBase, engine
+from board.db.database import TelemetryBase
 
 
 class Experiment(TelemetryBase):
@@ -43,10 +43,10 @@ class Run(TelemetryBase):
                                         ),
                                         default="pending"
                                     )
-    created_at:    Mapped[datetime]        = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    started_at:    Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at:   Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    experiment:    Mapped[Experiment]      = relationship(back_populates = "runs")
+    created_at:    Mapped[datetime]          = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    started_at:    Mapped[datetime | None]   = mapped_column(DateTime(timezone=True))
+    finished_at:   Mapped[datetime | None]   = mapped_column(DateTime(timezone=True))
+    experiment:    Mapped[Experiment]        = relationship(back_populates = "runs")
     metrics:       Mapped[list[MetricFloat]] = relationship(back_populates="run")
     # fmt: on
 
