@@ -3,19 +3,22 @@ import logging
 from contextlib import asynccontextmanager
 from functools import partial
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from board.api.schemas import (
     ExperimentRequest,
     ExperimentResponse,
+    MetricFloatResponse,
     RunRequest,
     RunResponse,
 )
 from board.db.database import SessionLocal, get_db
-from board.db.models import Experiment, Run
+from board.db.models import Experiment, MetricFloat, Run
 from board.telemetry.processor import process_telemetry_message
 from board.telemetry.protocol import TelemetryMessage
 from board.telemetry.schemas import parse_event_payload
@@ -141,3 +144,62 @@ def create_run(experiment_id: int, request: RunRequest, session: SessionDep) -> 
         session.add(run)
 
     return run
+
+
+@app.get("/api/v1/experiments", response_model=list[ExperimentResponse])
+def get_experiments(session: SessionDep) -> list[Experiment]:
+    statement = select(Experiment).order_by(Experiment.created_at.desc())
+    return list(session.scalars(statement).all())
+
+
+@app.get("/api/v1/experiments/{experiment_id}", response_model=ExperimentResponse)
+def get_experiment(experiment_id: int, session: SessionDep) -> Experiment:
+    experiment = session.get(Experiment, experiment_id)
+    if experiment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+        )
+    return experiment
+
+
+@app.get("/api/v1/experiments/{experiment_id}/runs", response_model=list[RunResponse])
+def get_experiment_runs(experiment_id: int, session: SessionDep) -> list[Run]:
+    experiment = session.get(Experiment, experiment_id)
+    if experiment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Experiment {experiment_id} not found",
+        )
+
+    statement = (
+        select(Run)
+        .where(Run.experiment_id == experiment_id)
+        .order_by(Run.created_at.desc())
+    )
+    return list(session.scalars(statement).all())
+
+
+@app.get("/api/v1/runs/{run_id}", response_model=RunResponse)
+def get_run(run_id: UUID, session: SessionDep) -> Run:
+    run = session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Run {run_id} not found"
+        )
+    return run
+
+
+@app.get("/api/v1/runs/{run_id}/metrics", response_model=list[MetricFloatResponse])
+def get_run_metrics(run_id: UUID, session: SessionDep) -> list[MetricFloat]:
+    run = session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Run {run_id} not found"
+        )
+
+    statement = (
+        select(MetricFloat)
+        .where(MetricFloat.run_id == run_id)
+        .order_by(MetricFloat.step.asc(), MetricFloat.id.asc())
+    )
+    return list(session.scalars(statement).all())

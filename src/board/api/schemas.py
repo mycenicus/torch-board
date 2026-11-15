@@ -58,3 +58,29 @@ class RunResponse(StrictModel):
     model_name: str
     status: Status  # Created by DB
     created_at: datetime  # Created by DB. Not timezone-aware
+
+
+class MetricFloatRequest(StrictModel):
+    """
+    Schema for MetricFloat requests
+
+    POST /api/v1/runs/{run_id}/metrics
+    """
+
+    name: str = Field(min_length=1, max_length=128)
+    value: float
+    step: int = Field(ge=0)
+
+
+class MetricFloatResponse(StrictModel):
+    """Schema for Run response returned by API"""
+
+    # To be able to export variables from ORM
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+
+    id: int  # Created by DB
+    run_id: UUID  # Created by DB
+    name: str
+    value: float
+    step: int
+    recorded_at: datetime  # Created by DB. Not timezone-aware

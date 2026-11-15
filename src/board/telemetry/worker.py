@@ -12,7 +12,7 @@ MessageHandler = Callable[[TelemetryMessage], Awaitable[None]]
 
 
 # TODO: multiple workers
-# PERF: Replace with aqr?
+# PERF: Replace with aqr or Celery?
 class TelemetryWorker:
     """Bounded telemetry queue for processing messages"""
 
