@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Generator
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -39,7 +40,14 @@ def existing_run(test_session_factory: sessionmaker[Session]) -> Run:
     return Run(id=run_id, name="Run 1", model_name="transformer")
 
 
-def make_message(run_id: UUID) -> TelemetryMessage:
+def get_run(test_session_factory: sessionmaker[Session], run_id: UUID) -> Run:
+    with test_session_factory() as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        return run
+
+
+def make_message_metrics_batch(run_id: UUID) -> TelemetryMessage:
     return TelemetryMessage(
         run_id=run_id,
         source=TelemetrySource(machine_id="some-machine"),
@@ -55,10 +63,23 @@ def make_message(run_id: UUID) -> TelemetryMessage:
     )
 
 
+def make_message_run_status(
+    run_id: UUID, timestamp: datetime, status: str
+) -> TelemetryMessage:
+    return TelemetryMessage(
+        timestamp=timestamp,
+        run_id=run_id,
+        source=TelemetrySource(machine_id="some-machine"),
+        sequence=1,
+        event_type="run.status",
+        payload={"status": status},
+    )
+
+
 def test_persists_multiple_metrics(
     test_session_factory: sessionmaker[Session], existing_run: Run
 ):
-    message = make_message(existing_run.id)
+    message = make_message_metrics_batch(existing_run.id)
 
     asyncio.run(process_telemetry_message(message, test_session_factory))
 
@@ -78,7 +99,7 @@ def test_persists_multiple_metrics(
 
 
 def test_unknown_run_is_not_persisted(test_session_factory: sessionmaker[Session]):
-    message = make_message(uuid4())
+    message = make_message_metrics_batch(uuid4())
 
     with pytest.raises(UnknownRunError):
         asyncio.run(process_telemetry_message(message, test_session_factory))
@@ -108,7 +129,7 @@ def test_metrics_are_associated_with_correct_run(
         run1_id = run1.id
         run2_id = run2.id
 
-    message = make_message(run2_id)
+    message = make_message_metrics_batch(run2_id)
 
     asyncio.run(process_telemetry_message(message, test_session_factory))
 
@@ -118,3 +139,123 @@ def test_metrics_are_associated_with_correct_run(
         assert len(metrics) == 2
         assert all(metric.run_id == run2_id for metric in metrics)
         assert all(metric.run_id != run1_id for metric in metrics)
+
+
+def test_pending_runs_become_running(
+    existing_run: Run, test_session_factory: sessionmaker[Session]
+):
+    timestamp = datetime(2032, 11, 11, 11, 11, tzinfo=UTC)
+    message = make_message_run_status(existing_run.id, timestamp, "running")
+
+    asyncio.run(process_telemetry_message(message, test_session_factory))
+
+    run = get_run(test_session_factory, existing_run.id)
+
+    assert run.status == "running"
+    assert run.started_at == timestamp.replace(tzinfo=None)
+    assert run.finished_at is None
+
+
+@pytest.mark.parametrize("status", ["completed", "failed"])
+def test_pending_run_can_finish_without_start(
+    existing_run: Run, test_session_factory: sessionmaker[Session], status: str
+):
+    timestamp = datetime(2032, 11, 11, 11, 11, tzinfo=UTC)
+    message = make_message_run_status(existing_run.id, timestamp, status)
+
+    asyncio.run(process_telemetry_message(message, test_session_factory))
+
+    run = get_run(test_session_factory, existing_run.id)
+
+    assert run.status == status
+    assert run.started_at is None
+    assert run.finished_at == timestamp.replace(tzinfo=None)
+
+
+@pytest.mark.parametrize("status", ["completed", "failed"])
+def test_pending_run_can_finish(
+    existing_run: Run, test_session_factory: sessionmaker[Session], status: str
+):
+    started_at = datetime(2032, 11, 11, 11, 0, tzinfo=UTC)
+    message_start = make_message_run_status(existing_run.id, started_at, "running")
+
+    asyncio.run(process_telemetry_message(message_start, test_session_factory))
+
+    finished_at = datetime(2032, 11, 11, 11, 11, tzinfo=UTC)
+    message_finish = make_message_run_status(existing_run.id, finished_at, status)
+
+    asyncio.run(process_telemetry_message(message_finish, test_session_factory))
+
+    run = get_run(test_session_factory, existing_run.id)
+
+    assert run.status == status
+    assert run.started_at == started_at.replace(tzinfo=None)
+    assert run.finished_at == finished_at.replace(tzinfo=None)
+
+
+def test_repeated_running_does_not_overwrite_started_at(
+    existing_run: Run, test_session_factory: sessionmaker[Session]
+):
+    started_at = datetime(2032, 11, 11, 0, 0, tzinfo=UTC)
+    message1 = make_message_run_status(existing_run.id, started_at, "running")
+
+    asyncio.run(process_telemetry_message(message1, test_session_factory))
+
+    some_timestamp = datetime(2032, 11, 11, 11, tzinfo=UTC)
+    message2 = make_message_run_status(existing_run.id, some_timestamp, "running")
+
+    asyncio.run(process_telemetry_message(message2, test_session_factory))
+
+    run = get_run(test_session_factory, existing_run.id)
+
+    assert run.status == "running"
+    assert run.started_at == started_at.replace(tzinfo=None)
+
+
+@pytest.mark.parametrize(
+    ("initial_status", "incoming_status"),
+    [
+        ("completed", "running"),
+        ("completed", "failed"),
+        ("completed", "completed"),
+        ("failed", "running"),
+        ("failed", "completed"),
+        ("failed", "failed"),
+    ],
+)
+def test_run_terminal_status_cannot_be_changed(
+    existing_run: Run,
+    test_session_factory: sessionmaker[Session],
+    initial_status: str,
+    incoming_status: str,
+):
+    original_timestamp = datetime(2032, 11, 11, 0, 0, tzinfo=UTC)
+    message1 = make_message_run_status(
+        existing_run.id, original_timestamp, initial_status
+    )
+
+    asyncio.run(process_telemetry_message(message1, test_session_factory))
+
+    incoming_timestamp = datetime(2032, 11, 11, 11, 11, tzinfo=UTC)
+    message2 = make_message_run_status(
+        existing_run.id, incoming_timestamp, incoming_status
+    )
+
+    asyncio.run(process_telemetry_message(message2, test_session_factory))
+
+    run = get_run(test_session_factory, existing_run.id)
+
+    assert run.status == initial_status
+    assert run.finished_at == original_timestamp.replace(tzinfo=None)
+
+
+def test_unknown_run(
+    test_session_factory: sessionmaker[Session],
+):
+    timestamp = datetime(2032, 11, 11, 0, 0, tzinfo=UTC)
+    message = make_message_run_status(
+        UUID("00000000-0000-0000-0000-000000000001"), timestamp, "running"
+    )
+
+    with pytest.raises(UnknownRunError):
+        asyncio.run(process_telemetry_message(message, test_session_factory))

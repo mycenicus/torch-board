@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -27,9 +27,16 @@ class MetricBatch(StrictModel):
     metrics: list[MetricSample] = Field(min_length=1)
 
 
+class RunStatus(StrictModel):
+    """Event for changing status of Run objects"""
+
+    status: Literal["running", "completed", "failed"]
+
+
 # Assign event_type to Pydantic model
 EVENT_SCHEMAS: dict[str, type[StrictModel]] = {
     "metrics.batch": MetricBatch,
+    "run.status": RunStatus,
 }
 
 
