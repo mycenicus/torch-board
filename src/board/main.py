@@ -33,10 +33,12 @@ QUEUE_MAX_SIZE = 1000
 async def lifespan(app: FastAPI):
     """Manage the telemetry worker lifecycle"""
 
+    session_factory = getattr(app.state, "session_factory", SessionLocal)
+
     worker = TelemetryWorker(
         handler=partial(  # DB Session is partially applied
             process_telemetry_message,
-            session_factory=SessionLocal,
+            session_factory=session_factory,
         ),
         max_queue_size=QUEUE_MAX_SIZE,
     )

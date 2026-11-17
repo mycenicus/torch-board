@@ -58,6 +58,8 @@ class RunResponse(StrictModel):
     model_name: str
     status: Status  # Created by DB
     created_at: datetime  # Created by DB. Not timezone-aware
+    started_at: datetime | None
+    finished_at: datetime | None
 
 
 class MetricFloatRequest(StrictModel):

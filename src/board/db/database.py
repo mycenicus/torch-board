@@ -9,6 +9,7 @@ DATABASE_DIR = PROJECT_ROOT / "data"
 DATABASE_DIR.mkdir(parents=True, exist_ok=True)
 DATABASE_URL = f"sqlite:///{DATABASE_DIR / 'training_monitor.db'}"
 
+# TODO: async engine
 engine = create_engine(
     DATABASE_URL, connect_args={"check_same_thread": False}, echo=True
 )
