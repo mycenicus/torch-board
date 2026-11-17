@@ -2,3 +2,6 @@ __pycache__/
 data/
 python-publish-package.yml
 msg.json
+AGENTS.md
+docs/FRONTEND_MILESTONE_PLAN.md
+docs/PROJECT_CONTEXT.md
