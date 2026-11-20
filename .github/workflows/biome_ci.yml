@@ -3,19 +3,14 @@ name: Code quality
 on: [push, pull_request]
 
 jobs:
-  quality:
+  install:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - name: Setup Biome
-        uses: biomejs/setup-biome@v2
-        with:
-          version: latest
       - name: Setup Node.js and install dependencies
         uses: actions/setup-node@v4
         with:
@@ -24,15 +19,65 @@ jobs:
           cache-dependency-path: src/frontend/package-lock.json
       - run: npm ci
         working-directory: src/frontend
-      - name: Run Biome
-        run: biome ci .
+      - name: Cache node_modules
+        uses: actions/cache/save@v4
+        with:
+          path: src/frontend/node_modules
+          key: modules-${{ runner.os }}-${{ hashFiles('src/frontend/package-lock.json') }}
+      - name: Setup Biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: latest
+
+
+  biome:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/cache/restore@v4
+        with:
+          path: src/frontend/node_modules
+          key: modules-${{ runner.os }}-${{ hashFiles('src/frontend/package-lock.json') }}
+      - run: biome ci .
         working-directory: src/frontend
-      - name: ESLint
-        run: npm run eslint .
+
+  eslint:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/cache/restore@v4
+        with:
+          path: src/frontend/node_modules
+          key: modules-${{ runner.os }}-${{ hashFiles('src/frontend/package-lock.json') }}
+      - run: npm run eslint .
         working-directory: src/frontend
-      - name: Type check
-        run: npx tsc --noEmit
+
+  typecheck:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/cache/restore@v4
+        with:
+          path: src/frontend/node_modules
+          key: modules-${{ runner.os }}-${{ hashFiles('src/frontend/package-lock.json') }}
+      - run: npx tsc --noEmit
         working-directory: src/frontend
-      - name: Build
-        run: npm run build
+
+  build:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/cache/restore@v4
+        with:
+          path: src/frontend/node_modules
+          key: modules-${{ runner.os }}-${{ hashFiles('src/frontend/package-lock.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: src/frontend/node_modules/.vite
+          key: vite-${{ runner.os }}-${{ hashFiles('src/frontend/package-lock.json') }}
+      - run: npm run build
         working-directory: src/frontend
