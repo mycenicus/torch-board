@@ -1,0 +1,169 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #20252d;
+  background: #f5f7fa;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+a {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 0 32px;
+  background: #fff;
+  border-bottom: 1px solid #e2e7ee;
+}
+
+.brand {
+  color: #182230;
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.page-content {
+  width: min(100% - 40px, 960px);
+  margin: 40px auto;
+}
+
+.page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 8px;
+  font-size: clamp(1.6rem, 4vw, 2rem);
+}
+
+h2 {
+  margin-bottom: 8px;
+  font-size: 1.05rem;
+}
+
+.muted,
+.experiment-card time {
+  color: #667085;
+}
+
+.experiment-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.experiment-card,
+.state-panel {
+  padding: 22px 24px;
+  background: #fff;
+  border: 1px solid #e2e7ee;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 4%);
+}
+
+.experiment-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.experiment-card p,
+.state-panel p:last-child {
+  margin-bottom: 0;
+}
+
+.experiment-card time {
+  flex: 0 0 auto;
+  font-size: 0.875rem;
+}
+
+.state-panel {
+  max-width: 620px;
+}
+
+.button {
+  padding: 9px 14px;
+  color: #fff;
+  background: #245bd6;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: #194bb9;
+}
+
+.button:focus-visible,
+.text-button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #9dbbff;
+  outline-offset: 3px;
+}
+
+.refresh-warning {
+  padding: 12px 14px;
+  color: #7a4b00;
+  background: #fff7e6;
+  border-radius: 6px;
+}
+
+.text-button {
+  padding: 0;
+  color: #194bb9;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    padding-inline: 20px;
+  }
+
+  .experiment-card {
+    flex-direction: column;
+  }
+
+  .experiment-card time {
+    white-space: normal;
+  }
+}

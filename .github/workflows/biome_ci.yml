@@ -1,0 +1,38 @@
+name: Code quality
+
+on: [push, pull_request]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: latest
+      - name: Setup Node.js and install dependencies
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: src/frontend/package-lock.json
+      - run: npm ci
+        working-directory: src/frontend
+      - name: Run Biome
+        run: biome ci .
+        working-directory: src/frontend
+      - name: ESLint
+        run: npm run eslint .
+        working-directory: src/frontend
+      - name: Type check
+        run: npx tsc --noEmit
+        working-directory: src/frontend
+      - name: Build
+        run: npm run build
+        working-directory: src/frontend
