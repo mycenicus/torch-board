@@ -1,6 +1,10 @@
-name: Code quality
+name: Frontend code quality
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   install:
@@ -24,11 +28,6 @@ jobs:
         with:
           path: src/frontend/node_modules
           key: modules-${{ runner.os }}-${{ hashFiles('src/frontend/package-lock.json') }}
-      - name: Setup Biome
-        uses: biomejs/setup-biome@v2
-        with:
-          version: latest
-
 
   biome:
     needs: install
@@ -39,7 +38,7 @@ jobs:
         with:
           path: src/frontend/node_modules
           key: modules-${{ runner.os }}-${{ hashFiles('src/frontend/package-lock.json') }}
-      - run: biome ci .
+      - run: npx @biomejs/biome ci .
         working-directory: src/frontend
 
   eslint:

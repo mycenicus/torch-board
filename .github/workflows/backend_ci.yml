@@ -1,5 +1,4 @@
-
-name: CI
+name: Backend tests and lint
 
 on:
   push:
