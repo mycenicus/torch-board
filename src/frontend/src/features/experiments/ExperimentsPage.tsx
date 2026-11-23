@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { ApiError } from "../../api/client";
 import { getExperiments } from "../../api/experiments";
 
@@ -66,11 +67,19 @@ export function ExperimentsPage() {
         <ul className="experiment-list">
           {experimentsQuery.data.map((experiment) => (
             <li className="experiment-card" key={experiment.id}>
-              <div>
-                <h2>{experiment.name}</h2>
-                <p className="muted">{experiment.description || "No description"}</p>
-              </div>
-              <time dateTime={experiment.created_at}>Created {formatDate(experiment.created_at)}</time>
+              <Link
+                className="experiment-card-link"
+                to="/experiments/$experimentId"
+                params={{ experimentId: experiment.id }}
+              >
+                <div className="experiment-card">
+                  <div>
+                    <h2>{experiment.name}</h2>
+                    <p className="muted">{experiment.description || "No description"}</p>
+                  </div>
+                  <time dateTime={experiment.created_at}>Created {formatDate(experiment.created_at)}</time>
+                </div>
+              </Link>
             </li>
           ))}
         </ul>
