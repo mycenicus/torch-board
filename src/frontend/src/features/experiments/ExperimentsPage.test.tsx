@@ -1,38 +1,25 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { jsonResponse } from "../../test/mockResponse";
-import { ExperimentsPage } from "./ExperimentsPage";
+import { renderApp } from "../../test/renderApp";
 
-function renderExperimentsPage() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <ExperimentsPage />
-    </QueryClientProvider>,
-  );
-}
-
-describe("ExperimentsPage", () => {
-  it("shows a loading state while experiments are fetched", () => {
+describe("experiments navigation", () => {
+  it("shows a loading state while experiments are fetched", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() => new Promise<Response>(() => undefined)),
     );
 
-    renderExperimentsPage();
+    renderApp();
 
-    expect(screen.getByText("Loading experiments…")).toBeInTheDocument();
+    expect(await screen.findByText("Loading experiments…")).toBeInTheDocument();
   });
 
   it("shows an actionable message when the API is unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
-    renderExperimentsPage();
+    renderApp();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not reach the API. Check that the backend is running.",
@@ -42,45 +29,75 @@ describe("ExperimentsPage", () => {
   it("shows an empty state when there are no experiments", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse([])));
 
-    renderExperimentsPage();
+    renderApp();
 
     expect(await screen.findByRole("heading", { name: "No experiments yet" })).toBeInTheDocument();
   });
 
-  it("renders experiment details returned by the API", async () => {
-    const createdAt = "2026-11-20T10:30:00";
+  it("links an experiment to its detail route", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
         jsonResponse([
           {
-            id: 1,
+            id: 12,
             name: "baseline",
             description: "First training experiment",
-            created_at: createdAt,
+            created_at: "2026-11-20T10:30:00",
           },
         ]),
       ),
     );
 
-    renderExperimentsPage();
+    renderApp();
 
-    expect(await screen.findByRole("heading", { name: "baseline" })).toBeInTheDocument();
-    expect(screen.getByText("First training experiment")).toBeInTheDocument();
-    expect(screen.getByRole("time")).toHaveAttribute("datetime", createdAt);
+    expect(await screen.findByRole("link", { name: /baseline/ })).toHaveAttribute("href", "/experiments/12");
   });
 
-  it("allows retry after an HTTP error", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({}, 503)).mockResolvedValueOnce(jsonResponse([]));
+  it("opens an experiment and displays its metadata and runs", async () => {
+    const createdAt = "2026-11-20T10:30:00";
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/v1/experiments") {
+        return Promise.resolve(
+          jsonResponse([{ id: 1, name: "baseline", description: "First experiment", created_at: createdAt }]),
+        );
+      }
+      if (path === "/api/v1/experiments/1") {
+        return Promise.resolve(
+          jsonResponse({ id: 1, name: "baseline", description: "First experiment", created_at: createdAt }),
+        );
+      }
+      if (path === "/api/v1/experiments/1/runs") {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              id: "f09580f0-07b6-42ac-bfea-266d01827eac",
+              experiment_id: 1,
+              name: "run one",
+              model_name: "resnet",
+              status: "running",
+              created_at: createdAt,
+              started_at: null,
+              finished_at: null,
+            },
+          ]),
+        );
+      }
+      return Promise.resolve(jsonResponse({}, 404));
+    });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    renderExperimentsPage();
+    renderApp();
+    await user.click(await screen.findByRole("link", { name: /baseline/ }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 503");
-    await user.click(screen.getByRole("button", { name: "Try again" }));
-
-    expect(await screen.findByRole("heading", { name: "No experiments yet" })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole("heading", { name: "baseline" })).toBeInTheDocument();
+    expect(screen.getByText("First experiment")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Runs for baseline" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /run one resnet running/ })).toBeInTheDocument();
+    expect(screen.getByText("Not started")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/experiments/1", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/experiments/1/runs", expect.anything());
   });
 });
