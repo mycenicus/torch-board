@@ -12,7 +12,8 @@
     "format:check": "biome format .",
     "check": "biome check .",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.108.0",

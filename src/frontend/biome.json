@@ -60,7 +60,10 @@
             "useYield": "error"
           },
           "performance": { "noDelete": "error" },
-          "style": { "useErrorCause": "error" },
+          "style": {
+            "useErrorCause": "error",
+            "useConsistentTestIt": "error"
+          },
           "suspicious": {
             "noAsyncPromiseExecutor": "error",
             "noCatchAssign": "error",
