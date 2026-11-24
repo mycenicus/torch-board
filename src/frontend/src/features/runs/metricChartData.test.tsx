@@ -31,10 +31,10 @@ const metrics: MetricFloat[] = [
 ];
 
 describe("toMetricChartData", () => {
-  it("sorts by step and ID while retaining duplicate steps", () => {
+  it("sorts by step and removes duplicates", () => {
     expect(toMetricChartData(metrics, "loss")).toEqual([
-      [1, 1, 2],
-      [0.5, 0.4, 0.25],
+      [1, 2],
+      [0.4, 0.25],
     ]);
   });
 
