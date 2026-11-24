@@ -21,6 +21,7 @@ export function RunDetailPage() {
   const metricsQuery = useQuery({
     queryKey: ["runs", runId, "metrics"],
     queryFn: ({ signal }) => getRunMetrics(parseUUID4(runId), signal),
+    enabled: runQuery.isSuccess,
   });
 
   if (runQuery.isPending) {

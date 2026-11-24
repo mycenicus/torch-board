@@ -19,13 +19,19 @@ export function MetricChart({ metricName, metrics }: MetricChartProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
   const data = useMemo(() => toMetricChartData(metrics, metricName), [metrics, metricName]);
+  const dataRef = useRef(data); // for resize callback without recreating the whole chart
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
 
-    const resizeObserver = new ResizeObserver(([entries]) => {
-      const width = Math.floor(entries.contentRect.width);
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const width = Math.floor(entry.contentRect.width);
       if (width <= 0) return;
 
       if (!chartRef.current) {
@@ -45,7 +51,7 @@ export function MetricChart({ metricName, metrics }: MetricChartProps) {
             ],
             axes: [{ label: "Training step" }, { label: metricName }],
           },
-          data,
+          dataRef.current,
           root,
         );
       } else {
@@ -60,7 +66,7 @@ export function MetricChart({ metricName, metrics }: MetricChartProps) {
       chartRef.current?.destroy();
       chartRef.current = null;
     };
-  }, [data, metricName]);
+  }, [metricName]);
 
   useEffect(() => {
     chartRef.current?.setData(data);
