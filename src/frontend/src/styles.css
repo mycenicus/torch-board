@@ -290,3 +290,27 @@ a:focus-visible {
     white-space: normal;
   }
 }
+
+.metric-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+  gap: 1rem;
+}
+
+.metric-card {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border-color, #d8dee8);
+  border-radius: 0.75rem;
+  background: var(--surface-color, #fff);
+}
+
+.metric-card h3 {
+  margin-top: 0;
+}
+
+.metric-chart {
+  min-width: 0;
+  width: 100%;
+  min-height: 260px;
+}

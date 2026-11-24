@@ -138,7 +138,11 @@ export function ExperimentDetailPage() {
               <tbody>
                 {runsQuery.data.map((run) => (
                   <tr key={run.id}>
-                    <th scope="row">{run.name}</th>
+                    <th scope="row">
+                      <Link to="/runs/$runId" params={{ runId: run.id }}>
+                        {run.name}
+                      </Link>
+                    </th>
                     <td>{run.model_name}</td>
                     <td>
                       <span className={`status-badge status-${run.status}`}>{run.status}</span>

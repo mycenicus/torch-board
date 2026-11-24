@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
+import "uplot/dist/uPlot.min.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
