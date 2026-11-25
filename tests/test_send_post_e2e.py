@@ -2,7 +2,6 @@
 
 import subprocess
 import time
-from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -23,7 +22,7 @@ def source() -> TelemetrySource:
 
 
 @pytest.fixture
-def message_data(source: TelemetrySource) -> dict[str, Any]:
+def message_data(source: TelemetrySource) -> dict[str, object]:
     return {
         "run_id": uuid4().hex,
         "source": source.model_dump(),
@@ -44,7 +43,7 @@ def message_data(source: TelemetrySource) -> dict[str, Any]:
 
 
 @pytest.fixture
-def message(message_data: dict[str, Any]) -> TelemetryMessage:
+def message(message_data: dict[str, object]) -> TelemetryMessage:
     return TelemetryMessage.model_validate(message_data)
 
 

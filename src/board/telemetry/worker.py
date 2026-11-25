@@ -16,6 +16,7 @@ MessageHandler = Callable[[TelemetryMessage], Awaitable[None]]
 # TODO: retry
 # TODO: message deduplication, idempotence
 # PERF: Replace with aqr or Celery?
+# PERF: ProcessPoolExecutor
 class TelemetryWorker:
     """Bounded telemetry queue for processing messages"""
 

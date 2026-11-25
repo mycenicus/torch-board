@@ -2,8 +2,10 @@ import logging
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from board.api.schemas import MetricFloatResponse
 from board.db.database import SessionLocal
 from board.db.models import MetricFloat, Run
+from board.telemetry.connections import WebSocketsManager
 from board.telemetry.protocol import TelemetryMessage
 from board.telemetry.schemas import MetricBatch, RunStatus, parse_event_payload
 
@@ -19,6 +21,7 @@ class UnknownRunError(Exception):
 async def process_telemetry_message(
     message: TelemetryMessage,
     session_factory: sessionmaker[Session] = SessionLocal,
+    ws_connection_manager: WebSocketsManager | None = None,
 ) -> None:
     """Validate and persist one message asynchronously"""
 
@@ -38,7 +41,13 @@ async def process_telemetry_message(
                 raise TypeError("Unexpected payload type for metrics.batch")
 
             logger.info("Called handler for %s", message.event_type)
-            handle_metrics_batch(session_factory, message, payload)
+
+            records = handle_metrics_batch(session_factory, message, payload)
+
+            if ws_connection_manager is not None:
+                logger.info("WebSockets are now handling metrics")
+                for record in records:
+                    await ws_connection_manager.publish_metric(message.run_id, record)
 
         case "run.status":
             if not isinstance(payload, RunStatus):
@@ -55,7 +64,7 @@ def handle_metrics_batch(
     session_factory: sessionmaker[Session],
     message: TelemetryMessage,
     payload: MetricBatch,
-) -> None:
+) -> list[dict[str, object]]:
     with session_factory.begin() as session:
         run = session.get(Run, message.run_id)
 
@@ -74,6 +83,12 @@ def handle_metrics_batch(
         ]
 
         session.add_all(metrics)
+        session.flush()
+
+        records = [
+            MetricFloatResponse.model_validate(metric).model_dump(mode="json")
+            for metric in metrics
+        ]
 
     logger.info(
         "Persisted %d metrics for run %s at step %d",
@@ -81,6 +96,8 @@ def handle_metrics_batch(
         message.run_id,
         payload.step,
     )
+
+    return records
 
 
 def handle_run_status(

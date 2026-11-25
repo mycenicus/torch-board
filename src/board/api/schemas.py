@@ -75,7 +75,9 @@ class MetricFloatRequest(StrictModel):
 
 
 class MetricFloatResponse(StrictModel):
-    """Schema for Run response returned by API"""
+    """
+    Schema for MetricFloat payload, returned by API
+    """
 
     # To be able to export variables from ORM
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)

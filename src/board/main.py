@@ -5,7 +5,16 @@ from functools import partial
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,6 +28,7 @@ from board.api.schemas import (
 )
 from board.db.database import SessionLocal, get_db
 from board.db.models import Experiment, MetricFloat, Run
+from board.telemetry.connections import WebSocketsManager
 from board.telemetry.processor import process_telemetry_message
 from board.telemetry.protocol import TelemetryMessage
 from board.telemetry.schemas import parse_event_payload
@@ -34,11 +44,14 @@ async def lifespan(app: FastAPI):
     """Manage the telemetry worker lifecycle"""
 
     session_factory = getattr(app.state, "session_factory", SessionLocal)
+    ws_connection_manager = WebSocketsManager()
+    app.state.ws_connection_manager = ws_connection_manager
 
     worker = TelemetryWorker(
         handler=partial(  # DB Session is partially applied
             process_telemetry_message,
             session_factory=session_factory,
+            ws_connection_manager=ws_connection_manager,
         ),
         max_queue_size=QUEUE_MAX_SIZE,
     )
@@ -52,6 +65,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await worker.stop(timeout=10.0)
+        await ws_connection_manager.close_all()
         logger.info("Application stopped")
 
 
@@ -96,7 +110,7 @@ async def receive_telemetry(
             detail="Telemetry processing is unavailable",
         ) from exc
 
-    return {"status": "accepted", "message_id": message.message_id.hex}
+    return {"status": "accepted", "message_id": str(message.message_id)}
 
 
 @app.get("/api/v1/telemetry/status")
@@ -192,16 +206,47 @@ def get_run(run_id: UUID, session: SessionDep) -> Run:
 
 
 @app.get("/api/v1/runs/{run_id}/metrics", response_model=list[MetricFloatResponse])
-def get_run_metrics(run_id: UUID, session: SessionDep) -> list[MetricFloat]:
+def get_run_metrics(
+    run_id: UUID,
+    session: SessionDep,
+    after_id: Annotated[int | None, Query(ge=0)] = None,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 500,
+) -> list[MetricFloat]:
     run = session.get(Run, run_id)
     if run is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Run {run_id} not found"
         )
 
-    statement = (
-        select(MetricFloat)
-        .where(MetricFloat.run_id == run_id)
-        .order_by(MetricFloat.step.asc(), MetricFloat.id.asc())
-    )
+    statement = select(MetricFloat).where(MetricFloat.run_id == run_id)
+
+    if after_id is None:
+        statement = statement.order_by(MetricFloat.step.asc(), MetricFloat.step.asc())
+    else:
+        statement = (
+            statement.where(MetricFloat.id > after_id)
+            .order_by(MetricFloat.id.asc())
+            .limit(limit)
+        )
     return list(session.scalars(statement).all())
+
+
+@app.websocket("/ws/runs/{run_id}")
+async def run_metrics_websocket(
+    websocket: WebSocket, run_id: UUID, session: SessionDep
+) -> None:
+    if session.get(Run, run_id) is None:
+        await websocket.close(code=1008)
+        return
+
+    manager: WebSocketsManager = websocket.app.state.ws_connection_manager
+    client = await manager.connect(run_id, websocket)
+
+    try:
+        # Waiting for client input lets Starlette report when it disconnects.
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await manager.disconnect(run_id, client)
