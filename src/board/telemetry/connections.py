@@ -8,7 +8,6 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 CLIENT_QUEUE_SIZE = 256
-CLIENT_CLEANUP_TIMEOUT = 0.5
 
 
 @dataclass(eq=False)
@@ -18,6 +17,7 @@ class WebSocketClient:
         default_factory=lambda: asyncio.Queue(maxsize=CLIENT_QUEUE_SIZE)
     )
     sender_task: asyncio.Task[None] | None = None
+    disconnect_scheduled: bool = False
 
 
 class WebSocketsManager:
@@ -32,12 +32,32 @@ class WebSocketsManager:
         self._retiring: set[WebSocketClient] = set()
         self._background_tasks: set[asyncio.Task[None]] = set()
 
-    async def connect(self, run_id: UUID, websocket: WebSocket) -> WebSocketClient:
-        await websocket.accept()
-        client = WebSocketClient(websocket=websocket)
-        self._clients[run_id].add(client)
-        client.sender_task = asyncio.create_task(self._send_loop(run_id, client))
-        return client
+        self._lifecycle_lock: asyncio.Lock = asyncio.Lock()
+        self._closing: bool = False
+        self.CLIENT_CLEANUP_TIMEOUT: float = 0.5
+
+    async def connect(
+        self, run_id: UUID, websocket: WebSocket
+    ) -> WebSocketClient | None:
+        async with self._lifecycle_lock:
+            if self._closing:
+                return None
+
+            try:
+                async with asyncio.timeout(self.CLIENT_CLEANUP_TIMEOUT):
+                    await websocket.accept()
+            except TimeoutError:
+                logger.warning("Timed out accepting WebSocket for run %s", run_id)
+                return None
+
+            client = WebSocketClient(websocket=websocket)
+            self._clients[run_id].add(client)
+            client.sender_task = asyncio.create_task(
+                self._send_loop(run_id, client),
+                name=f"websocket-sender-{run_id}",
+            )
+            self._track_task(client.sender_task)
+            return client
 
     async def _send_loop(self, run_id: UUID, client: WebSocketClient) -> None:
         try:
@@ -78,6 +98,11 @@ class WebSocketsManager:
         close_code: int | None,
         reason: str | None = None,
     ) -> None:
+        if client.disconnect_scheduled:
+            return
+
+        client.disconnect_scheduled = True
+
         self._remove(run_id, client)
         self._retiring.add(client)
 
@@ -108,7 +133,9 @@ class WebSocketsManager:
         sender = client.sender_task
         if sender is not None and sender is not asyncio.current_task():
             sender.cancel()
-            _, pending = await asyncio.wait({sender}, timeout=CLIENT_CLEANUP_TIMEOUT)
+            _, pending = await asyncio.wait(
+                {sender}, timeout=self.CLIENT_CLEANUP_TIMEOUT
+            )
             if pending:
                 logger.warning("WebSocket sender exceeded cleanup deadline")
 
@@ -116,7 +143,7 @@ class WebSocketsManager:
             return
 
         try:
-            async with asyncio.timeout(CLIENT_CLEANUP_TIMEOUT):
+            async with asyncio.timeout(self.CLIENT_CLEANUP_TIMEOUT):
                 await client.websocket.close(code=close_code, reason=reason)
         except TimeoutError:
             logger.warning("WebSocket close exceeded cleanup deadline")
@@ -161,24 +188,32 @@ class WebSocketsManager:
         await asyncio.sleep(0)
 
     async def close_all(self) -> None:
-        clients = [
-            (run_id, client)
-            for run_id, run_clients in self._clients.items()
-            for client in tuple(run_clients)
-        ]
-        for run_id, client in clients:
-            await self.disconnect(
-                run_id,
-                client,
-                close_code=1001,
-                reason="Server is shutting down.",
-            )
+        async with self._lifecycle_lock:
+            self._closing = True
 
-        tasks = set(self._background_tasks)
-        if not tasks:
-            return
+            for run_id, clients in tuple(self._clients.items()):
+                for client in tuple(clients):
+                    self._schedule_disconnect(
+                        run_id,
+                        client,
+                        close_code=1001,
+                        reason="Server is shutting down.",
+                    )
 
-        _, pending = await asyncio.wait(tasks, timeout=2 * CLIENT_CLEANUP_TIMEOUT)
+        deadline = asyncio.get_running_loop().time() + (2 * self.CLIENT_CLEANUP_TIMEOUT)
+
+        while self._background_tasks:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
+
+            tasks = tuple(self._background_tasks)
+            _, pending = await asyncio.wait(tasks, timeout=remaining)
+
+            if pending:
+                break
+
+        pending = tuple(task for task in self._background_tasks if not task.done())
 
         if pending:
             logger.warning(
@@ -188,4 +223,4 @@ class WebSocketsManager:
             for task in pending:
                 task.cancel()
 
-        await asyncio.gather(*tasks, return_exceptions=True)
+            await asyncio.gather(*pending, return_exceptions=True)
