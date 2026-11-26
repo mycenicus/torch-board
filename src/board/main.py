@@ -245,6 +245,8 @@ async def run_metrics_websocket(
 
     manager: WebSocketsManager = websocket.app.state.ws_connection_manager
     client = await manager.connect(run_id, websocket)
+    if client is None:
+        return
 
     try:
         # Waiting for client input lets Starlette report when it disconnects.
