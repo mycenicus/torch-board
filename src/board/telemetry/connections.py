@@ -36,11 +36,21 @@ class WebSocketsManager:
         self._closing: bool = False
         self.CLIENT_CLEANUP_TIMEOUT: float = 0.5
 
+    async def _reject_connection(self, websocket: WebSocket) -> None:
+        try:
+            async with asyncio.timeout(self.CLIENT_CLEANUP_TIMEOUT):
+                await websocket.close(code=1001, reason="Server is shutting down.")
+        except TimeoutError:
+            logger.warning("Timed oud rejecting WebSocket during shutdown")
+        except RuntimeError, WebSocketDisconnect, OSError:
+            logger.debug("WebSocket was already closed during rejection.")
+
     async def connect(
         self, run_id: UUID, websocket: WebSocket
     ) -> WebSocketClient | None:
         async with self._lifecycle_lock:
             if self._closing:
+                await self._reject_connection(websocket)
                 return None
 
             try:
