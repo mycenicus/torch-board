@@ -6,13 +6,16 @@ E2E tests
 3. Send incorrect messages and then send correct to see if everything is ok
 """
 
+import asyncio
 import time
 from collections.abc import Generator
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
@@ -20,7 +23,8 @@ from sqlalchemy.pool import StaticPool
 
 from board.db.database import TelemetryBase, get_db
 from board.db.models import Experiment, Run
-from board.main import app
+from board.main import app, run_metrics_websocket
+from board.telemetry.connections import WebSocketsManager
 
 
 @pytest.fixture
@@ -161,6 +165,69 @@ def wait_for_run_status(
         f"Run {run_id} did not reach status {expected_status!r} "
         f"within {timeout} seconds"
     )
+
+
+def test_websocket_rejects_unknown_run(
+    test_session_factory: sessionmaker[Session],
+) -> None:
+    class FakeWebSocket:
+        app = SimpleNamespace(
+            state=SimpleNamespace(session_factory=test_session_factory)
+        )
+        close_code: int | None = None
+
+        async def close(self, code: int) -> None:
+            self.close_code = code
+
+    websocket = FakeWebSocket()
+    session = test_session_factory()
+    asyncio.run(
+        # pyrefly: ignore[bad-argument-type]
+        run_metrics_websocket(websocket, uuid4(), session)  # pyright: ignore[reportArgumentType]
+    )
+
+    assert websocket.close_code == 1008
+
+
+def test_websocket_accepts_existing_run_and_unregisters_on_disconnect(
+    test_session_factory: sessionmaker[Session],
+) -> None:
+    run_id = create_run(test_session_factory)
+    manager = WebSocketsManager()
+
+    class FakeWebSocket:
+        app = SimpleNamespace(
+            state=SimpleNamespace(
+                session_factory=test_session_factory,
+                ws_connection_manager=manager,
+            )
+        )
+        accepted = False
+
+        async def accept(self) -> None:
+            self.accepted = True
+
+        async def receive_text(self) -> str:
+            raise WebSocketDisconnect(code=1000)
+
+        async def send_json(self, message: dict[str, object]) -> None:
+            pass
+
+        async def close(self, code: int = 1000, reason: str | None = None) -> None:
+            pass
+
+    websocket = FakeWebSocket()
+    session = test_session_factory()
+
+    async def exercise_route() -> None:
+        # pyrefly: ignore[bad-argument-type]
+        await run_metrics_websocket(websocket, run_id, session)  # pyright: ignore[reportArgumentType]
+        await manager.close_all()
+
+    asyncio.run(exercise_route())
+
+    assert websocket.accepted
+    assert run_id not in manager._clients
 
 
 def test_metrics_persisted_through_telemetry_api(
