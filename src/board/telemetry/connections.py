@@ -47,9 +47,15 @@ class WebSocketsManager:
                     await client.websocket.send_json(message)
                 finally:
                     client.queue.task_done()
+        except asyncio.CancelledError:
+            raise
         except WebSocketDisconnect, RuntimeError, OSError:
             logger.info("WebSocket client disconnected for run %s", run_id)
-            await self.disconnect(run_id, client, close_code=1011)
+            self._schedule_disconnect(run_id, client, close_code=1011)
+        except Exception:
+            logger.exception("WebSocket sender failed for run %s", run_id)
+            logger.info("Scheduling disconnect and waiting for browser to reconnect")
+            self._schedule_disconnect(run_id, client, close_code=1011)
         finally:
             self._remove(run_id, client)
 
