@@ -502,3 +502,26 @@ def test_get_run_metrics_ordered_by_step_and_id(
     assert data == expected
 
     assert [metric["step"] for metric in data] == [1, 1, 2, 2]
+
+
+def test_get_run_metrics_after_id_is_limited_and_ordered_by_id(
+    client: TestClient,
+    test_session_factory: sessionmaker[Session],
+):
+    run_id = create_run_with_metrics(test_session_factory)
+    all_metrics = client.get(f"/api/v1/runs/{run_id}/metrics").json()
+    cursor = all_metrics[0]["id"]
+
+    response = client.get(
+        f"/api/v1/runs/{run_id}/metrics",
+        params={"after_id": cursor, "limit": 2},
+    )
+
+    assert response.status_code == 200
+    expected = sorted(
+        (metric for metric in all_metrics if metric["id"] > cursor),
+        key=lambda metric: metric["id"],
+    )[:2]
+    assert [metric["id"] for metric in response.json()] == [
+        metric["id"] for metric in expected
+    ]

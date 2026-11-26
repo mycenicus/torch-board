@@ -98,6 +98,36 @@ def test_persists_multiple_metrics(
         assert metrics[1].run_id == existing_run.id
 
 
+def test_publishes_metrics_only_after_they_are_committed(
+    test_session_factory: sessionmaker[Session], existing_run: Run
+):
+    message = make_message_metrics_batch(existing_run.id)
+    published_ids: list[int] = []
+
+    class VerifyingConnectionManager:
+        async def publish_metric(self, run_id: UUID, metric: dict[str, object]) -> None:
+            assert run_id == existing_run.id
+            metric_id = metric["id"]
+            assert isinstance(metric_id, int)
+
+            with test_session_factory() as session:
+                stored_metric = session.get(MetricFloat, metric_id)
+
+            assert stored_metric is not None
+            published_ids.append(metric_id)
+
+    asyncio.run(
+        process_telemetry_message(
+            message,
+            test_session_factory,
+            # pyrefly: ignore[bad-argument-type]
+            VerifyingConnectionManager(),  # pyright: ignore[reportArgumentType]
+        )
+    )
+
+    assert len(published_ids) == 2
+
+
 def test_unknown_run_is_not_persisted(test_session_factory: sessionmaker[Session]):
     message = make_message_metrics_batch(uuid4())
 
