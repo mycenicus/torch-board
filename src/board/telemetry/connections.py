@@ -83,7 +83,8 @@ class WebSocketsManager:
 
         # If client was sending a message, schedule it for cancel
         sender = client.sender_task
-        if sender is not None and not sender.done():
+        current_task = asyncio.current_task()
+        if sender is not None and sender is not current_task and not sender.done():
             sender.cancel()
             self._track_task(sender)
 
@@ -186,3 +187,5 @@ class WebSocketsManager:
             )
             for task in pending:
                 task.cancel()
+
+        await asyncio.gather(*tasks, return_exceptions=True)
