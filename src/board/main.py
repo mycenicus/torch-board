@@ -235,7 +235,11 @@ def get_run_metrics(
 async def run_metrics_websocket(
     websocket: WebSocket, run_id: UUID, session: SessionDep
 ) -> None:
-    if session.get(Run, run_id) is None:
+    # db session waits until endpoint closes, but websocket can exist all application lifespan
+    run_exists = session.get(Run, run_id) is not None
+    session.close()
+
+    if not run_exists:
         await websocket.close(code=1008)
         return
 
