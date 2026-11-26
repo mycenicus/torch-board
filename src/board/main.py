@@ -221,7 +221,7 @@ def get_run_metrics(
     statement = select(MetricFloat).where(MetricFloat.run_id == run_id)
 
     if after_id is None:
-        statement = statement.order_by(MetricFloat.step.asc(), MetricFloat.step.asc())
+        statement = statement.order_by(MetricFloat.step.asc(), MetricFloat.id.asc())
     else:
         statement = (
             statement.where(MetricFloat.id > after_id)

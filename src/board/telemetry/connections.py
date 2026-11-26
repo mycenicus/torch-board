@@ -46,6 +46,7 @@ class WebSocketsManager:
                     client.queue.task_done()
         except WebSocketDisconnect, RuntimeError, OSError:
             logger.info("WebSocket client disconnected for run %s", run_id)
+            await self.disconnect(run_id, client, close_code=1011)
         finally:
             self._remove(run_id, client)
 
@@ -56,13 +57,26 @@ class WebSocketsManager:
             if not clients:
                 self._clients.pop(run_id, None)
 
-    async def disconnect(self, run_id: UUID, client: WebSocketClient) -> None:
+    async def disconnect(
+        self,
+        run_id: UUID,
+        client: WebSocketClient,
+        *,
+        close_code: int | None = None,
+        reason: str | None = None,
+    ) -> None:
         self._remove(run_id, client)
 
         task = client.sender_task
         if task is not None and task is not asyncio.current_task():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+
+        if close_code is not None:
+            try:
+                await client.websocket.close(code=close_code, reason=reason)
+            except RuntimeError, WebSocketDisconnect, OSError:
+                pass
 
     async def publish_metric(self, run_id: UUID, metric: dict[str, object]) -> None:
         message: dict[str, object] = {
@@ -71,7 +85,7 @@ class WebSocketsManager:
             "metric": metric,
         }
 
-        # If queue fills, the manager disconnects so it can recconect and
+        # If the queue fills, close the client so it can reconnect and
         # recover over HTTP
         for client in tuple(self._clients.get(run_id, ())):
             try:
@@ -80,7 +94,16 @@ class WebSocketsManager:
                 logger.warning(
                     "Disconnecting slow WebSocket client for run: %s", run_id
                 )
-                await self.disconnect(run_id, client)
+                await self.disconnect(
+                    run_id,
+                    client,
+                    close_code=1013,
+                    reason="Client fell behind; reconnect to recover metrics.",
+                )
+
+        # put_nowait() doesn't suspend. Give sender tasks a chance to drain
+        # their queues before the next metric is published.
+        await asyncio.sleep(0)
 
     async def close_all(self) -> None:
         clients = [
@@ -89,8 +112,9 @@ class WebSocketsManager:
             for client in tuple(run_clients)
         ]
         for run_id, client in clients:
-            try:
-                await client.websocket.close(code=1001)
-            except RuntimeError, WebSocketDisconnect:
-                pass
-            await self.disconnect(run_id, client)
+            await self.disconnect(
+                run_id,
+                client,
+                close_code=1001,
+                reason="Server is shutting down.",
+            )
