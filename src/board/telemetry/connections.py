@@ -166,3 +166,17 @@ class WebSocketsManager:
                 close_code=1001,
                 reason="Server is shutting down.",
             )
+
+        tasks = set(self._background_tasks)
+        if not tasks:
+            return
+
+        _, pending = await asyncio.wait(tasks, timeout=2 * CLIENT_CLEANUP_TIMEOUT)
+
+        if pending:
+            logger.warning(
+                "WebSocket cleanup tasks remained after shutdown deadline: %s",
+                len(pending),
+            )
+            for task in pending:
+                task.cancel()
