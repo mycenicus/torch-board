@@ -26,7 +26,7 @@ from board.api.schemas import (
     RunRequest,
     RunResponse,
 )
-from board.db.database import SessionLocal, get_db
+from board.db.database import IS_IN_MEMORY_DB, SessionLocal, get_db
 from board.db.models import Experiment, MetricFloat, Run
 from board.telemetry.connections import WebSocketsManager
 from board.telemetry.processor import process_telemetry_message
@@ -42,6 +42,10 @@ QUEUE_MAX_SIZE = 1000
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage the telemetry worker lifecycle"""
+    if IS_IN_MEMORY_DB:
+        from board.db.database import TelemetryBase, engine
+
+        TelemetryBase.metadata.create_all(engine)
 
     session_factory = getattr(app.state, "session_factory", SessionLocal)
     ws_connection_manager = WebSocketsManager()
