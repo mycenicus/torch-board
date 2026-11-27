@@ -32,3 +32,20 @@ export function getRunMetrics(run_id: UUID4, signal?: AbortSignal): Promise<Metr
   assertUUID4(run_id);
   return getJson<MetricFloat[]>(`/api/v1/runs/${run_id}/metrics`, { signal });
 }
+
+export const LIVE_METRIC_PAGE_SIZE = 500;
+
+export function getRunMetricsAfter(run_id: UUID4, after_id: number, signal?: AbortSignal): Promise<MetricFloat[]> {
+  assertUUID4(run_id);
+
+  if (!Number.isSafeInteger(after_id) || after_id < 0) {
+    throw new RangeError("Metric cursor must be a non-negative integer.");
+  }
+
+  const query = new URLSearchParams({
+    after_id: String(after_id),
+    limit: String(LIVE_METRIC_PAGE_SIZE),
+  });
+
+  return getJson<MetricFloat[]>(`/api/v1/runs/${run_id}/metrics?${query}`, { signal });
+}

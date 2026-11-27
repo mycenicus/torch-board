@@ -3,6 +3,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { ApiError, parseUUID4 } from "../../api/client";
 import { getRun, getRunMetrics } from "../../api/runs";
 import { MetricChart } from "./MetricChart";
+import { useLiveRunMetrics } from "./useLiveRunMetricHook";
 
 function formatDate(value: string | null): string {
   if (!value) return "-";
@@ -24,6 +25,9 @@ export function RunDetailPage() {
     enabled: runQuery.isSuccess,
   });
 
+  const run = runQuery.data;
+  const liveState = useLiveRunMetrics(run?.id, run?.status === "pending" || run?.status === "running");
+
   if (runQuery.isPending) {
     return (
       <section className="state-panel" aria-live="polite">
@@ -32,7 +36,7 @@ export function RunDetailPage() {
     );
   }
 
-  if (runQuery.isError || !runQuery.data) {
+  if (runQuery.isError || !run) {
     const status = runQuery.error instanceof ApiError ? runQuery.error.status : undefined;
 
     return (
@@ -51,7 +55,6 @@ export function RunDetailPage() {
     );
   }
 
-  const run = runQuery.data;
   const metricNames = [...new Set((metricsQuery.data ?? []).map((metric) => metric.name))].sort();
 
   return (
@@ -70,6 +73,9 @@ export function RunDetailPage() {
         <div>
           <h1 id="run-title">{run.name}</h1>
           <p className="muted">{run.model_name}</p>
+          <p aria-live="polite" className="muted">
+            Live updates: {liveState}
+          </p>
         </div>
         <span className={`status-badge status-${run.status}`}>{run.status}</span>
       </div>
