@@ -3,6 +3,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -12,7 +13,11 @@ DEFAULT_DATABASE_URL = f"sqlite:///{DATABASE_DIR / 'training_monitor.db'}"
 
 
 DATABASE_URL = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
-IS_IN_MEMORY_DB = DATABASE_URL in ("sqlite://", "sqlite:///:memory:")
+parsed_url = make_url(DATABASE_URL)
+IS_IN_MEMORY_DB = parsed_url.get_backend_name() == "sqlite" and parsed_url.database in (
+    None,
+    ":memory:",
+)
 
 engine_options: dict[str, object] = {"echo": True}
 
