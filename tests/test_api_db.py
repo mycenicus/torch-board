@@ -14,7 +14,7 @@ from board.db.models import Experiment, Run
 
 def configure_database(monkeypatch: pytest.MonkeyPatch, url: str) -> Engine:
     """Inject an isolated engine without reloading mapped ORM modules."""
-    in_memory = url in ("sqlite://", "sqlite:///:memory:")
+    in_memory = database.is_in_memory_sqlite_url(url)
     engine_url = url
     options: dict[str, object] = {"echo": False}
     if url.startswith("sqlite"):
