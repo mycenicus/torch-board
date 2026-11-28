@@ -9,17 +9,33 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 
+# Clanker discovered that uri=true is not the only possibility in sqlalchemy
+# source.
+# Other options are uri=t, uri=1, uri=y, ...
+def _query_flag_is_true(value: str | tuple[str, ...] | None) -> bool:
+    # Repeated query parameters are ambiguous; require exactly one value.
+    if isinstance(value, tuple):
+        if len(value) != 1:
+            return False
+        value = value[0]
+
+    if not isinstance(value, str):
+        return False
+
+    return value.strip().casefold() in {"1", "true", "yes", "on", "y", "t"}
+
+
 def is_in_memory_sqlite_url(database_url: str | URL) -> bool:
     url = make_url(database_url)
 
     if url.get_backend_name() != "sqlite":
         return False
 
-    if url.database in (None, ":memory:"):
+    if url.database in (None, "", ":memory:"):
         return True
 
-    is_sqlite_uri = url.database.startswith("file:") and (
-        url.query.get("uri", "") == "true"
+    is_sqlite_uri = url.database.startswith("file:") and _query_flag_is_true(
+        url.query.get("uri")
     )
     is_memory_uri = url.query.get("mode") == "memory" or url.database.startswith(
         "file::memory:"
