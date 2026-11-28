@@ -26,7 +26,7 @@ from board.api.schemas import (
     RunRequest,
     RunResponse,
 )
-from board.db.database import SessionLocal, get_db
+from board.db.database import IS_IN_MEMORY_DB, SessionLocal, get_db
 from board.db.models import Experiment, MetricFloat, Run
 from board.telemetry.connections import WebSocketsManager
 from board.telemetry.processor import process_telemetry_message
@@ -42,6 +42,17 @@ QUEUE_MAX_SIZE = 1000
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage the telemetry worker lifecycle"""
+    database_keepalive = None
+
+    if IS_IN_MEMORY_DB:
+        from board.db.database import TelemetryBase, engine
+
+        database_keepalive = engine.connect()
+        try:
+            TelemetryBase.metadata.create_all(engine)
+        except Exception:
+            database_keepalive.close()
+            raise
 
     session_factory = getattr(app.state, "session_factory", SessionLocal)
     ws_connection_manager = WebSocketsManager()
@@ -66,6 +77,8 @@ async def lifespan(app: FastAPI):
     finally:
         await worker.stop(timeout=10.0)
         await ws_connection_manager.close_all()
+        if database_keepalive is not None:
+            database_keepalive.close()
         logger.info("Application stopped")
 
 
