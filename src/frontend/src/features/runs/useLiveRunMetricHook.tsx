@@ -67,7 +67,7 @@ export function useLiveRunMetrics(run_id: UUID4 | undefined, enabled: boolean): 
       if (batch.length === 0) return;
 
       queryClient.setQueryData<MetricFloat[]>(queryKey, (current = []) => {
-        mergeMetricBatches(current, batch);
+        return mergeMetricBatches(current, batch);
       });
       cursor = batch.reduce((highestId, metric) => Math.max(highestId, metric.id), cursor);
     }
