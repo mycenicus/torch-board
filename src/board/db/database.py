@@ -4,9 +4,29 @@ from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy import create_engine
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import QueuePool
+
+
+def is_in_memory_sqlite_url(database_url: str | URL) -> bool:
+    url = make_url(database_url)
+
+    if url.get_backend_name() != "sqlite":
+        return False
+
+    if url.database in (None, ":memory:"):
+        return True
+
+    is_sqlite_uri = url.database.startswith("file:") and (
+        url.query.get("uri", "") == "true"
+    )
+    is_memory_uri = url.query.get("mode") == "memory" or url.database.startswith(
+        "file::memory:"
+    )
+
+    return is_sqlite_uri and is_memory_uri
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATABASE_DIR = PROJECT_ROOT / "data"
@@ -14,12 +34,9 @@ DEFAULT_DATABASE_URL = f"sqlite:///{DATABASE_DIR / 'training_monitor.db'}"
 
 
 DATABASE_URL = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
-parsed_url = make_url(DATABASE_URL)
-IS_IN_MEMORY_DB = parsed_url.get_backend_name() == "sqlite" and parsed_url.database in (
-    None,
-    ":memory:",
-)
+IS_IN_MEMORY_DB = is_in_memory_sqlite_url(DATABASE_URL)
 ENGINE_DATABASE_URL = DATABASE_URL
+
 
 engine_options: dict[str, object] = {"echo": True}
 
