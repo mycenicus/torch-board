@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { UUID4 } from "../../api/client";
 import { getRunMetricsAfter, LIVE_METRIC_PAGE_SIZE, type MetricFloat } from "../../api/runs";
+import { mergeMetricBatches } from "./metricCache";
 
 type LiveState = "connecting" | "recovering" | "live" | "reconnecting";
 
@@ -62,16 +63,20 @@ export function useLiveRunMetrics(run_id: UUID4 | undefined, enabled: boolean): 
     const cached = queryClient.getQueryData<MetricFloat[]>(queryKey) ?? [];
     let cursor = cached.reduce((maxId, metric) => Math.max(maxId, metric.id), 0);
 
-    function merge(metric: MetricFloat) {
+    function mergeBatch(batch: readonly MetricFloat[]) {
+      if (batch.length === 0) return;
+
       queryClient.setQueryData<MetricFloat[]>(queryKey, (current = []) => {
-        const byId = new Map(current.map((item) => [item.id, item]));
-        byId.set(metric.id, metric);
-        return [...byId.values()].toSorted((a, b) => a.step - b.step || a.id - b.id);
+        mergeMetricBatches(current, batch);
       });
-      cursor = Math.max(cursor, metric.id);
+      cursor = batch.reduce((highestId, metric) => Math.max(highestId, metric.id), cursor);
     }
 
-    async function recover() {
+    function merge(metric: MetricFloat) {
+      mergeBatch([metric]);
+    }
+
+    async function recover(activeSocket: WebSocket) {
       if (!run_id) return;
 
       recovering = true;
@@ -83,20 +88,27 @@ export function useLiveRunMetrics(run_id: UUID4 | undefined, enabled: boolean): 
 
           if (page.length === 0) break;
 
-          for (const metric of page) merge(metric);
+          mergeBatch(page);
 
           if (page.length < LIVE_METRIC_PAGE_SIZE) break;
         }
 
-        buffered.sort((a, b) => a.id - b.id);
-        for (const metric of buffered) merge(metric);
+        const bufferedBatch = buffered.toSorted((a, b) => a.id - b.id);
         buffered = [];
+        mergeBatch(bufferedBatch);
+
         recovering = false;
         setState("live");
+        retryAttempt = 0;
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setState("reconnecting");
+          return;
         }
+
+        if (stopped || activeSocket !== socket) return;
+
+        setState("reconnecting");
+        activeSocket.close();
       }
     }
 
@@ -114,11 +126,12 @@ export function useLiveRunMetrics(run_id: UUID4 | undefined, enabled: boolean): 
       currentSocket.onopen = () => {
         retryAttempt = 0;
         recoveryController = new AbortController();
-        void recover();
+        void recover(currentSocket);
       };
 
       currentSocket.onmessage = (event) => {
-        if (socket !== currentSocket || typeof event.data !== "string") return;
+        if (socket !== currentSocket || currentSocket.readyState !== WebSocket.OPEN || typeof event.data !== "string")
+          return;
 
         const metric = parseMetricUpdate(event.data, run_id);
         if (!metric) return;

@@ -3,6 +3,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { ApiError, parseUUID4 } from "../../api/client";
 import { getRun, getRunMetrics } from "../../api/runs";
 import { MetricChart } from "./MetricChart";
+import { preserveMetricCache } from "./metricCache";
 import { useLiveRunMetrics } from "./useLiveRunMetricHook";
 
 function formatDate(value: string | null): string {
@@ -23,10 +24,12 @@ export function RunDetailPage() {
     queryKey: ["runs", runId, "metrics"],
     queryFn: ({ signal }) => getRunMetrics(parseUUID4(runId), signal),
     enabled: runQuery.isSuccess,
+    structuralSharing: preserveMetricCache,
   });
 
   const run = runQuery.data;
-  const liveState = useLiveRunMetrics(run?.id, run?.status === "pending" || run?.status === "running");
+  const isLiveRun = run?.status == "pending" || run?.status == "running";
+  const liveState = useLiveRunMetrics(run?.id, isLiveRun);
 
   if (runQuery.isPending) {
     return (
@@ -73,9 +76,11 @@ export function RunDetailPage() {
         <div>
           <h1 id="run-title">{run.name}</h1>
           <p className="muted">{run.model_name}</p>
-          <p aria-live="polite" className="muted">
-            Live updates: {liveState}
-          </p>
+          {isLiveRun ? (
+            <p aria-live="polite" className="muted">
+              Live updates: {liveState}
+            </p>
+          ) : null}
         </div>
         <span className={`status-badge status-${run.status}`}>{run.status}</span>
       </div>
