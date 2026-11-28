@@ -40,6 +40,19 @@ def configure_database(monkeypatch: pytest.MonkeyPatch, url: str) -> Engine:
 
 
 @pytest.mark.parametrize(
+    ("db_url"),
+    [
+        ("sqlite://"),
+        ("sqlite:///"),
+        ("sqlite:///:memory:"),
+        ("sqlite:///file:test?mode=memory&cache=shared&uri=True"),
+    ],
+)
+def test_correct_in_memory_url_parsing(db_url: str):
+    assert database.is_in_memory_sqlite_url(db_url)
+
+
+@pytest.mark.parametrize(
     ("db_url", "expect_create_all"),
     [
         ("file", False),
